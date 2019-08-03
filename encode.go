@@ -31,6 +31,19 @@ var (
 	errAnything = errors.New("") // used in testing
 )
 
+type Modifier string
+
+const (
+	MOD_NONE                Modifier = ""
+	MOD_MULTILINE_STRING    Modifier = "multiline_string"
+	MOD_MULTILINE_RAWSTRING Modifier = "multiline_rawstring"
+)
+
+var validmodifiers = map[Modifier]reflect.Kind{
+	MOD_MULTILINE_STRING:    reflect.String,
+	MOD_MULTILINE_RAWSTRING: reflect.String,
+}
+
 var quotedReplacer = strings.NewReplacer(
 	"\t", "\\t",
 	"\n", "\\n",
@@ -50,14 +63,18 @@ type Encoder struct {
 	// hasWritten is whether we have written any output to w yet.
 	hasWritten bool
 	w          *bufio.Writer
+
+	// modifiers contains a map of struct field keys with detected modifiers
+	modifier Modifier
 }
 
 // NewEncoder returns a TOML encoder that encodes Go values to the io.Writer
 // given. By default, a single indentation level is 2 spaces.
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
-		w:      bufio.NewWriter(w),
-		Indent: "  ",
+		w:        bufio.NewWriter(w),
+		Indent:   "  ",
+		modifier: MOD_NONE,
 	}
 }
 
@@ -369,6 +386,13 @@ func (enc *Encoder) eStruct(key Key, rv reflect.Value) {
 				continue
 			}
 
+			keyModifier := Modifier(sft.Tag.Get("modifier"))
+			if kind, ok := validmodifiers[keyModifier]; ok && sf.Kind() == kind {
+				enc.modifier = keyModifier
+			} else {
+				enc.modifier = MOD_NONE
+			}
+
 			enc.encode(key.add(keyName), sf)
 		}
 	}
@@ -516,10 +540,46 @@ func (enc *Encoder) keyEqElement(key Key, val reflect.Value) {
 	if len(key) == 0 {
 		encPanic(errNoKey)
 	}
+
 	panicIfInvalidKey(key)
 	enc.wf("%s%s = ", enc.indentStr(key), key.maybeQuoted(len(key)-1))
-	enc.eElement(val)
+
+	//a modifier exists on this element, handle it with the appropriate function
+	switch enc.modifier {
+	case MOD_MULTILINE_STRING:
+		enc.writeMultiLineString(val.String(), false)
+	case MOD_MULTILINE_RAWSTRING:
+		enc.writeMultiLineString(val.String(), true)
+	default:
+		enc.eElement(val)
+	}
+
 	enc.newline()
+	enc.modifier = MOD_NONE //re-setting the flag for safety. shoud not strictly be necessary
+}
+
+func (enc *Encoder) writeMultiLineString(s string, raw bool) {
+	//if there are any windows style CRLF terminations, replace them with newlines and then split
+	s = strings.Replace(s, "\r\n", "\n", -1)
+	lines := strings.Split(s, "\n")
+
+	var marker string
+	if raw {
+		marker = `'''`
+	} else {
+		marker = `"""`
+	}
+
+	enc.wf(marker) //triple quote to start multiline string
+	for _, line := range lines {
+		enc.newline() //spec: decoder must remove \n if after triple quote
+		if raw {
+			enc.wf(line)
+		} else {
+			enc.wf(quotedReplacer.Replace(line)) //quote the rest of the characters
+		}
+	}
+	enc.wf(marker)
 }
 
 func (enc *Encoder) wf(format string, v ...interface{}) {
