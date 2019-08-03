@@ -1124,7 +1124,7 @@ duration = "8m03s"
 		log.Fatal(err)
 	}
 
-	// Code to implement the TextUnmarshaler interface for `duration`:
+	// Code to implement the encoding.TextUnmarshaler interface for `duration`:
 	//
 	// type duration struct {
 	// 	time.Duration

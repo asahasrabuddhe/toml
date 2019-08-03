@@ -1,6 +1,7 @@
 package toml
 
 import (
+	"encoding"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -83,7 +84,7 @@ func (md *MetaData) PrimitiveDecode(primValue Primitive, v interface{}) error {
 // to the obvious Go types.
 //
 // An exception to the above rules is if a type implements the
-// encoding.TextUnmarshaler interface. In this case, any primitive TOML value
+// encoding.encoding.TextUnmarshaler interface. In this case, any primitive TOML value
 // (floats, strings, integers, booleans and datetimes) will be converted to
 // a byte string and given to the value's UnmarshalText method. See the
 // Unmarshaler example for a demonstration with time duration strings.
@@ -178,13 +179,13 @@ func (md *MetaData) unify(data interface{}, rv reflect.Value) error {
 		return md.unifyDatetime(data, rv)
 	}
 
-	// Special case. Look for a value satisfying the TextUnmarshaler interface.
-	if v, ok := rv.Interface().(TextUnmarshaler); ok {
+	// Special case. Look for a value satisfying the encoding.TextUnmarshaler interface.
+	if v, ok := rv.Interface().(encoding.TextUnmarshaler); ok {
 		return md.unifyText(data, v)
 	}
 	// BUG(burntsushi)
 	// The behavior here is incorrect whenever a Go type satisfies the
-	// encoding.TextUnmarshaler interface but also corresponds to a TOML
+	// encoding.encoding.TextUnmarshaler interface but also corresponds to a TOML
 	// hash or array. In particular, the unmarshaler should only be applied
 	// to primitive TOML values. But at this point, it will be applied to
 	// all kinds of values and produce an incorrect error whenever those values
@@ -439,10 +440,10 @@ func (md *MetaData) unifyAnything(data interface{}, rv reflect.Value) error {
 	return nil
 }
 
-func (md *MetaData) unifyText(data interface{}, v TextUnmarshaler) error {
+func (md *MetaData) unifyText(data interface{}, v encoding.TextUnmarshaler) error {
 	var s string
 	switch sdata := data.(type) {
-	case TextMarshaler:
+	case encoding.TextMarshaler:
 		text, err := sdata.MarshalText()
 		if err != nil {
 			return err
@@ -477,12 +478,12 @@ func rvalue(v interface{}) reflect.Value {
 // New values are allocated for each nil pointer.
 //
 // An exception to this rule is if the value satisfies an interface of
-// interest to us (like encoding.TextUnmarshaler).
+// interest to us (like encoding.encoding.TextUnmarshaler).
 func indirect(v reflect.Value) reflect.Value {
 	if v.Kind() != reflect.Ptr {
 		if v.CanSet() {
 			pv := v.Addr()
-			if _, ok := pv.Interface().(TextUnmarshaler); ok {
+			if _, ok := pv.Interface().(encoding.TextUnmarshaler); ok {
 				return pv
 			}
 		}
@@ -498,7 +499,7 @@ func isUnifiable(rv reflect.Value) bool {
 	if rv.CanSet() {
 		return true
 	}
-	if _, ok := rv.Interface().(TextUnmarshaler); ok {
+	if _, ok := rv.Interface().(encoding.TextUnmarshaler); ok {
 		return true
 	}
 	return false

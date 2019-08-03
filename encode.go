@@ -2,6 +2,7 @@ package toml
 
 import (
 	"bufio"
+	"encoding"
 	"errors"
 	"fmt"
 	"io"
@@ -65,7 +66,7 @@ func NewEncoder(w io.Writer) *Encoder {
 // then an error is returned.
 //
 // The mapping between Go values and TOML values should be precisely the same
-// as for the Decode* functions. Similarly, the TextMarshaler interface is
+// as for the Decode* functions. Similarly, the encoding.TextMarshaler interface is
 // supported by encoding the resulting bytes as strings. (If you want to write
 // arbitrary binary data then you will need to use something like base64 since
 // TOML does not have any binary types.)
@@ -109,9 +110,9 @@ func (enc *Encoder) encode(key Key, rv reflect.Value) {
 	// Special case. Time needs to be in ISO8601 format.
 	// Special case. If we can marshal the type to text, then we used that.
 	// Basically, this prevents the encoder for handling these types as
-	// generic structs (or whatever the underlying type of a TextMarshaler is).
+	// generic structs (or whatever the underlying type of a encoding.TextMarshaler is).
 	switch rv.Interface().(type) {
-	case time.Time, TextMarshaler:
+	case time.Time, encoding.TextMarshaler:
 		enc.keyEqElement(key, rv)
 		return
 	}
@@ -158,11 +159,11 @@ func (enc *Encoder) eElement(rv reflect.Value) {
 	switch v := rv.Interface().(type) {
 	case time.Time:
 		// Special case time.Time as a primitive. Has to come before
-		// TextMarshaler below because time.Time implements
-		// encoding.TextMarshaler, but we need to always use UTC.
+		// encoding.TextMarshaler below because time.Time implements
+		// encoding.encoding.TextMarshaler, but we need to always use UTC.
 		enc.wf(v.UTC().Format("2006-01-02T15:04:05Z"))
 		return
-	case TextMarshaler:
+	case encoding.TextMarshaler:
 		// Special case. Use text marshaler if it's available for this value.
 		if s, err := v.MarshalText(); err != nil {
 			encPanic(err)
@@ -411,7 +412,7 @@ func tomlTypeOfGo(rv reflect.Value) tomlType {
 		switch rv.Interface().(type) {
 		case time.Time:
 			return tomlDatetime
-		case TextMarshaler:
+		case encoding.TextMarshaler:
 			return tomlString
 		default:
 			return tomlHash
